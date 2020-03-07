@@ -1,3 +1,6 @@
+# 1.0.6
+- meta: update dependencies + eslint config, switch to nyc for coverage
+
 # 1.0.5
 - meta: bump bitfinex-api-node to v4
 
