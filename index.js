@@ -33,7 +33,6 @@ const exec = async (strategy = {}, wsManager = {}, args = {}) => {
   const { symbol, tf, includeTrades, seedCandleCount = 5000 } = args
   const candleKey = `trade:${tf}:${symbol}`
   const messages = []
-  let strategyState = strategy
   let lastCandle = null
   let processing = false
 
@@ -74,7 +73,7 @@ const exec = async (strategy = {}, wsManager = {}, args = {}) => {
       candle.tf = tf
       candle.symbol = symbol
 
-      strategyState = await onSeedCandle(strategyState, candle)
+      await onSeedCandle(strategy, candle)
       lastCandle = candle
       seededCandles += 1
     }
@@ -103,18 +102,18 @@ const exec = async (strategy = {}, wsManager = {}, args = {}) => {
     switch (type) {
       case 'trade': {
         debug('recv trade: %j', data)
-        strategyState = await onTrade(strategyState, data)
+        await onTrade(strategy, data)
         break
       }
 
       case 'candle': {
         if (lastCandle === null || lastCandle.mts < data.mts) {
           debug('recv candle %j', data)
-          strategyState = await onCandle(strategyState, data)
+          await onCandle(strategy, data)
           lastCandle = data
         } else if (lastCandle.mts === data.mts) {
           debug('updated candle %j', data)
-          strategyState = await onCandleUpdate(strategyState, data)
+          await onCandleUpdate(strategy, data)
         }
 
         break
