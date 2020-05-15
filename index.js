@@ -1,6 +1,6 @@
 'use strict'
 
-const debug = require('debug')('bfx:hf:strategy-exec')
+const Debug = require('debug')
 const { subscribe } = require('bfx-api-node-core')
 const { padCandles } = require('bfx-api-node-util')
 const { candleWidth } = require('bfx-hf-util')
@@ -9,7 +9,7 @@ const _reverse = require('lodash/reverse')
 const PromiseThrottle = require('promise-throttle')
 
 const {
-  onSeedCandle, onCandle, onCandleUpdate, onTrade
+  onSeedCandle, onCandle, onCandleUpdate, onTrade, indicatorValues
 } = require('bfx-hf-strategy')
 
 const CANDLE_FETCH_LIMIT = 1000
@@ -21,20 +21,29 @@ const pt = new PromiseThrottle({
 /**
  * Execute a strategy on a live market
  *
- * @param {Object} strategy - as created by define() from bfx-hf-strategy
- * @param {Object} wsManager - WSv2 pool instance from bfx-api-node-core
- * @param {Object} args - execution parameters
+ * @param {object} strategy - as created by define() from bfx-hf-strategy
+ * @param {object} wsManager - WSv2 pool instance from bfx-api-node-core
+ * @param {object} args - execution parameters
  * @param {string} args.symbol - market to execute on
  * @param {string} args.tf - time frame to execute on
- * @param {boolean} args.includeTrades - if true, trade data is subscribed to and processed
- * @param {number} args.seedCandleCount - size of indicator candle seed window, before which trading is disabled
+ * @param {boolean} args.includeTrades - if true, trade data is subscribed to
+ *   and processed
+ * @param {number} args.seedCandleCount - size of indicator candle seed window,
+ *   before which trading is disabled
+ * @param {Function} [args.debug] - optional debugger to be used instead of
+ *   internal function
  */
 const exec = async (strategy = {}, wsManager = {}, args = {}) => {
-  const { symbol, tf, includeTrades, seedCandleCount = 5000 } = args
+  const {
+    symbol, tf, includeTrades, seedCandleCount = 5000, debugTrades, debugCandles
+  } = args
+
   const candleKey = `trade:${tf}:${symbol}`
   const messages = []
   let lastCandle = null
   let processing = false
+
+  const debug = args.debug || Debug('bfx:hf:strategy-exec')
 
   debug('seeding with last ~%d candles...', seedCandleCount)
 
@@ -72,8 +81,10 @@ const exec = async (strategy = {}, wsManager = {}, args = {}) => {
 
       candle.tf = tf
       candle.symbol = symbol
+      candle.iv = indicatorValues(strategy)
 
       await onSeedCandle(strategy, candle)
+
       lastCandle = candle
       seededCandles += 1
     }
@@ -85,13 +96,11 @@ const exec = async (strategy = {}, wsManager = {}, args = {}) => {
   }
 
   const enqueMessage = (type, data) => {
-    debug('enqueue %s', type)
-
     messages.push({ type, data })
 
     if (!processing) {
       processMessages().catch((err) => {
-        debug('error processing: %s', err.stack)
+        debug('error processing: %s', err.stack ? err.stack : err)
       })
     }
   }
@@ -101,18 +110,27 @@ const exec = async (strategy = {}, wsManager = {}, args = {}) => {
 
     switch (type) {
       case 'trade': {
-        debug('recv trade: %j', data)
+        if (debugTrades !== false) {
+          debug('recv trade: %j', data)
+        }
+
         await onTrade(strategy, data)
         break
       }
 
       case 'candle': {
         if (lastCandle === null || lastCandle.mts < data.mts) {
-          debug('recv candle %j', data)
+          if (debugCandles !== false) {
+            debug('recv candle %j', data)
+          }
+
           await onCandle(strategy, data)
           lastCandle = data
         } else if (lastCandle.mts === data.mts) {
-          debug('updated candle %j', data)
+          if (debugCandles !== false) {
+            debug('updated candle %j', data)
+          }
+
           await onCandleUpdate(strategy, data)
         }
 
