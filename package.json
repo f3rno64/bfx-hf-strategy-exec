@@ -79,6 +79,6 @@
     "moment": "^2.22.2",
     "sprintf-js": "^1.1.1",
     "standard": "^14.2.0",
-    "webpack": "^2.4.1"
+    "webpack": "^5.94.0"
   }
 }
